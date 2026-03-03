@@ -80,34 +80,44 @@ async def main():
     app.state.db_pool = pool
     
     # Jadvallarni yaratish (agar mavjud bo'lmasa)
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                telegram_id BIGINT UNIQUE,
-                username TEXT,
-                full_name TEXT,
-                role TEXT DEFAULT 'user',
-                created_at TIMESTAMP DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS ads (
-                id SERIAL PRIMARY KEY,
-                title TEXT,
-                description TEXT,
-                price DECIMAL,
-                owner_id BIGINT REFERENCES users(telegram_id),
-                created_at TIMESTAMP DEFAULT NOW()
-            );
-            CREATE TABLE IF NOT EXISTS orders (
-                id SERIAL PRIMARY KEY,
-                advertiser_id BIGINT REFERENCES users(telegram_id),
-                business_id BIGINT REFERENCES users(telegram_id),
-                amount DECIMAL,
-                status TEXT,
-                created_at TIMESTAMP DEFAULT NOW()
-            );
-        """)
+    # backend.py dagi jadvallar qismini BUNGA ALMASHTIRING:
+
+async with pool.acquire() as conn:
+    # 1. Avval users jadvalini yaratamiz (PRIMARY KEY bilan)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            telegram_id BIGINT UNIQUE NOT NULL,  -- UNIQUE va NOT NULL muhim!
+            username TEXT,
+            full_name TEXT,
+            role TEXT DEFAULT 'user',
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+    """)
     
+    # 2. Keyin ads jadvalini (to'g'ri FOREIGN KEY bilan)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS ads (
+            id SERIAL PRIMARY KEY,
+            title TEXT,
+            description TEXT,
+            price DECIMAL,
+            owner_telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+    """)
+    
+    # 3. Orders jadvali
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id SERIAL PRIMARY KEY,
+            advertiser_telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+            business_telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+            amount DECIMAL,
+            status TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+    """) 
     # Botni polling rejimida ishga tushurish (webhook emas, chunki Render free da webhook muammo)
     asyncio.create_task(dp.start_polling(bot))
     
@@ -117,4 +127,5 @@ async def main():
     await server.serve()
 
 if __name__ == "__main__":
+
     asyncio.run(main())
